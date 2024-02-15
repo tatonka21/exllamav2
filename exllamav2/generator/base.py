@@ -42,8 +42,6 @@ class ExLlamaV2BaseGenerator:
         return self.sequence_ids.shape[-1] >= self.model.config.max_seq_len
 
 
-    # TODO: Argument to allow different random samples over batch dimension
-
     def generate_simple(self, prompt: str or list,
                         gen_settings: ExLlamaV2Sampler.Settings,
                         num_tokens: int,
@@ -106,7 +104,7 @@ class ExLlamaV2BaseGenerator:
         for i in range(num_tokens):
 
             logits = self.model.forward(self.sequence_ids[:, -1:], self.cache, input_mask = mask, loras = loras, position_offsets = position_offsets).float().cpu()
-            token, _, _ = ExLlamaV2Sampler.sample(logits, gen_settings, self.sequence_ids, random.random(), self.tokenizer, prefix_token = unhealed_token)
+            token, _, _, _, _ = ExLlamaV2Sampler.sample(logits, gen_settings, self.sequence_ids, random.random(), self.tokenizer, prefix_token = unhealed_token)
 
             eos = False
             if stop_token is not None:

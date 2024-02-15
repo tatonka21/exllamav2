@@ -230,27 +230,6 @@ void normalize_cpu
     for (int i = 0; i < num_candidates; i++) probs[i] *= isum;
 }
 
-int greedy_sample
-(
-    const int num_candidates,
-    const float* probs,
-    const bool* logits_filter
-)
-{
-    int maxidx = -1;
-    float max = -1e38;
-
-    for(int i = 1; i < num_candidates; i++)
-    {
-        if (logits_filter[i] && (maxidx == -1 || probs[i] > max))
-        {
-            max = probs[i];
-            maxidx = i;
-        }
-    }
-    return maxidx;
-}
-
 template <typename T>
 inline void swap(T &a, T &b)
 {
@@ -417,9 +396,29 @@ int top_k_cpu
 {
     //TIME_START;
 
+    // Special case greedy sampling
+
+    if (top_k == 1)
+    {
+        int maxidx = -1;
+        float max = -1e38;
+
+        for(int i = 0; i < num_candidates; i++)
+        {
+            if (maxidx == -1 || temp_probs[i] > max)
+            {
+                max = temp_probs[i];
+                maxidx = i;
+            }
+        }
+
+        swap<float>(temp_probs[0], temp_probs[maxidx]);
+        swap<int>(temp_indices[0], temp_indices[maxidx]);
+    }
+
     // Use min-heap for lower values of K
 
-    if (top_k <= top_k_heap_threshold)
+    else if (top_k <= top_k_heap_threshold)
     {
         std::priority_queue<std::pair<float, int>, std::vector<std::pair<float, int>>, std::greater<std::pair<float, int>>> min_heap;
 
@@ -683,12 +682,14 @@ int typical_cpu
 
     const float epsilon = 1e-10;
 
-    float* temp = (float*) malloc(num_candidates * sizeof(float));
-    int* entropy_dev_order = (int*) malloc(num_candidates * sizeof(int));
-    int* temp_indices_2 = (int*) malloc(num_candidates * sizeof(int));
+    int r_candidates = pre_sort_descending(num_candidates, temp_probs, temp_indices);
+
+    float* temp = (float*) malloc(r_candidates * sizeof(float));
+    int* entropy_dev_order = (int*) malloc(r_candidates * sizeof(int));
+    int* temp_indices_2 = (int*) malloc(r_candidates * sizeof(int));
 
     float neg_entropy = 0.0f;
-    for (int i = 0; i < num_candidates; i++)
+    for (int i = 0; i < r_candidates; i++)
     {
         float x = temp_probs[i];
         float y = x + logf(x + epsilon);
@@ -696,16 +697,16 @@ int typical_cpu
         temp[i] = y;  // temp = log_probs
     }
 
-    for (int i = 0; i < num_candidates; i++)
+    for (int i = 0; i < r_candidates; i++)
     {
         temp[i] = fabs(temp[i] - neg_entropy);  // temp = entropy_dev
         entropy_dev_order[i] = i;
     }
 
-    quicksort_with_idx<cmp_asc>(temp, entropy_dev_order, 0, num_candidates - 1, num_candidates);
+    quicksort_with_idx<cmp_asc>(temp, entropy_dev_order, 0, r_candidates - 1, r_candidates);
 
-    memcpy(temp, temp_probs, num_candidates * sizeof(float));  // temp = temp_probs
-    memcpy(temp_indices_2, temp_indices, num_candidates * sizeof(int));
+    memcpy(temp, temp_probs, r_candidates * sizeof(float));  // temp = temp_probs
+    memcpy(temp_indices_2, temp_indices, r_candidates * sizeof(int));
 
     float cumprob = 0.0f;
     int num = 0;
@@ -720,7 +721,7 @@ int typical_cpu
         cumprob += p;
         if (cumprob >= typical) break;
         num++;
-        if (num >= num_candidates) break;
+        if (num >= r_candidates) break;
     }
 
     free(temp);
@@ -762,8 +763,8 @@ int multinomial_cpu
         accum += temp_probs[idx];
     }
 
-    temp_probs[0] = temp_probs[idx];
-    temp_indices[0] = temp_indices[idx];
+    swap<float>(temp_probs[0], temp_probs[idx]);
+    swap<int>(temp_indices[0], temp_indices[idx]);
 
     return 1;
 }
