@@ -44,6 +44,8 @@ class ExLlamaV2Config:
     head_dim: int = 128                         # Constant for all Llama models, except 3b
     num_experts: int = None
     num_experts_per_token: int = None
+    attention_bias_qkv: bool = False
+    attention_bias_o: bool = False
 
     checkpoint_fused_mlp: bool = False
 
@@ -95,6 +97,9 @@ class ExLlamaV2Config:
             expect_keys_llama = [["lm_head"],
                                  ["model.norm"],
                                  ["model.embed_tokens"]]
+            expect_keys_gemma = [["model.norm"],
+                                 ["model.embed_tokens"]]
+
 
             if "LlamaForCausalLM" in read_config["architectures"]:
                 self.architecture = "Llama"
@@ -144,6 +149,25 @@ class ExLlamaV2Config:
                 expect_keys += \
                     expect_keys_llama
 
+            elif "Qwen2ForCausalLM" in read_config["architectures"]:
+                self.architecture = "Qwen2"
+                layer_keys += \
+                    layer_keys_llama_norms + \
+                    layer_keys_llama_attn + \
+                    layer_keys_llama_mlp
+                expect_keys += \
+                    expect_keys_llama
+                self.attention_bias_qkv = True
+                self.attention_bias_o = False
+
+            elif "GemmaForCausalLM" in read_config["architectures"]:
+                self.architecture = "Gemma"
+                layer_keys += \
+                    layer_keys_llama_norms + \
+                    layer_keys_llama_attn + \
+                    layer_keys_llama_mlp
+                expect_keys += \
+                    expect_keys_gemma
 
             else:
                 print(f" !! Warning, unknown architecture: {repr(read_config['architectures'])}")
@@ -167,6 +191,9 @@ class ExLlamaV2Config:
             self.num_hidden_layers = read_config["num_hidden_layers"]
             self.rms_norm_eps = read_config["rms_norm_eps"]
             self.vocab_size = read_config["vocab_size"]
+            if read_config.get("attention_bias", False):
+                self.attention_bias_qkv = True
+                self.attention_bias_o = True
 
             self.rotary_embedding_base = read_config["rope_theta"] if "rope_theta" in read_config else 10000.0
 
@@ -191,7 +218,10 @@ class ExLlamaV2Config:
 
         # Model dimensions
 
-        self.head_dim = self.hidden_size // self.num_attention_heads
+        if "head_dim" in read_config:
+            self.head_dim = read_config["head_dim"]
+        else:
+            self.head_dim = self.hidden_size // self.num_attention_heads
 
         # Create map of model tensors
 

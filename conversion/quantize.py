@@ -55,7 +55,7 @@ def quant_linear(job: dict,
     # Quantize
 
     lq.configure(qp.group_size, qp.bits, qp.bits_prop, qp.scale_bits)
-    lq.quantize(keep_qweight = True, apply = True, drop = drop)
+    lq.quantize(keep_qweight = True, apply = True)
 
     # Pack and save quantized layer
 
@@ -69,10 +69,12 @@ def quant_linear(job: dict,
 
     # Reconstruct from packed layer
 
-    recons_linear = ExLlamaV2Linear(source.model, source.key, source.in_features, source.out_features, False)
+    recons_linear = ExLlamaV2Linear(source.model, source.key, source.in_features, source.out_features, source.has_bias)
     recons_linear.device_idx = source.device_idx
     recons_dict = {}
-    for k in ["q_weight", "q_invperm", "q_scale", "q_scale_max", "q_groups"]:
+    recons_keys = ["q_weight", "q_invperm", "q_scale", "q_scale_max", "q_groups"]
+    if source.has_bias: recons_keys += ["bias"]
+    for k in recons_keys:
         recons_dict[k] = packed_dict[source.key + "." + k]
     recons_dict["q_perm"] = torch.argsort(recons_dict["q_invperm"]).to(torch.int)
     recons_linear.load(recons_dict)
@@ -86,6 +88,7 @@ def quant_linear(job: dict,
     recons_w2 = recons_linear.forward(ident, force_cuda = True)
 
     recons_w2.sub_(quant_w)
+    if recons_linear.has_bias: recons_w2.sub_(recons_dict["bias"])
     recons_w2.abs_()
     diff2 = torch.max(recons_w2)
 
@@ -164,7 +167,7 @@ def quant_lm_head(job, module, hidden_states, quantizers, cache, attn_params):
     quantizers["lm_head"].prepare()
 
     qp = qparams_headoptions[job["head_bits"]]
-    quant_linear(job, module, quantizers["lm_head"], qp.get_dict())
+    quant_linear(job, module, quantizers["lm_head"], qp.get_dict(), drop = True)
 
 
 # def testc(module, states, target_states, norm, layers):
@@ -271,7 +274,6 @@ def quant(job, save_fn, model):
         elif isinstance(module, ExLlamaV2RMSNorm) or isinstance(module, ExLlamaV2LayerNorm):
             mode = "norm"
 
-
         # Reference forward pass
 
         cache = None
@@ -335,6 +337,10 @@ def quant(job, save_fn, model):
             quant_moe_mlp(job, module, hidden_states, target_states, quantizers, cache, attn_params, strat)
 
         if mode == "linear":
+
+            model.drop_device_tensors()
+            gc.collect()  # shruge
+            torch.cuda.empty_cache()
             quant_lm_head(job, module, hidden_states, quantizers, cache, attn_params)
 
         quantizers.clear()
@@ -359,6 +365,7 @@ def quant(job, save_fn, model):
 
                 x = hidden_states[i].to("cuda:0")
                 output = module.forward(x, cache, attn_params)
+                x = None
                 q_states.append(output.to("cpu"))
 
                 output = output[0].float()
@@ -367,6 +374,9 @@ def quant(job, save_fn, model):
 
                 rfn_sum += (torch.linalg.norm(output - output_ref, 'fro') / torch.linalg.norm(output_ref, 'fro')).item()
                 rfn_count += 1
+
+                output_ref = None
+                output = None
 
             elif i < job["measurement_rows"]:
 
@@ -382,6 +392,10 @@ def quant(job, save_fn, model):
                 token_log_probs = log_probs.gather(-1, target_ids.unsqueeze(-1)).squeeze(-1)
                 logprob_sum += token_log_probs.sum().item()
                 logprob_count += target_ids.numel()
+
+                output = None
+                logits = None
+                token_log_probs = None
 
         if mode != "linear":
 
@@ -407,6 +421,7 @@ def quant(job, save_fn, model):
             # hidden_states = target_states
             # hidden_states = [(x + y) / 2 for x, y in zip(target_states, q_states)]
             hidden_states = q_states
+            q_states = None
 
         # Checkpoint
 

@@ -9,8 +9,6 @@ if sys.version_info < min_version:
 # Set CUDA context to lazy loading since we won't need 95% of the modules in Torch
 os.environ["CUDA_MODULE_LOADING"] = "LAZY"
 
-# Disabled for 0.0.13.post2
-#
 # # Set cudaMallocAsync allocator by default as it appears slightly more memory efficient, unless Torch is already
 # # imported in which case changing the allocator would cause it to crash
 # if not "PYTORCH_CUDA_ALLOC_CONF" in os.environ:
@@ -75,6 +73,14 @@ class ExLlamaV2DeviceTensors:
             self.scratch = torch.empty((self.scratch_bytes // 2,), dtype = torch.half, device = _torch_device(self.device_idx))
 
         self.ready = True
+
+
+    def drop(self):
+
+        self.scratch = None
+        self.sin = None
+        self.cos = None
+        self.ready = False
 
 
     def begin_scratch_alloc(self):
@@ -158,10 +164,13 @@ class ExLlamaV2:
         self.modules_dict[self.modules[-1].key] = self.modules[-1]
 
         self.head_layer_idx = len(self.modules)
+
         self.modules.append(ExLlamaV2Linear(self, "lm_head", self.config.hidden_size, self.config.vocab_size, False))
         self.modules_dict[self.modules[-1].key] = self.modules[-1]
+        if self.config.architecture == "Gemma":
+            self.modules[-1].alt_key = "model.embed_tokens"
 
-        # Find last layer that affects k/v cache
+    # Find last layer that affects k/v cache
 
         layer_idx = len(self.modules)
         while True:
@@ -459,6 +468,12 @@ class ExLlamaV2:
 
             tensors = ExLlamaV2DeviceTensors(self, idx, bytes)
             self.device_tensors.append(tensors)
+
+
+    def drop_device_tensors(self):
+
+        for dt in self.device_tensors:
+            dt.drop()
 
 
     def get_device_tensors(self, device_idx, scratch = True):
