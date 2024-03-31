@@ -1,4 +1,6 @@
 import sys, os
+import secrets
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from exllamav2 import(
@@ -16,7 +18,6 @@ from exllamav2.generator import (
 
 import torch
 import time
-import random
 
 # Initialize model
 
@@ -107,7 +108,7 @@ while len(prompts) or len(input_ids):
     logits = model.forward(inputs, caches, input_mask = None).float().cpu()
 
     eos = []
-    r = random.random()
+    r = secrets.SystemRandom().random()
     for i in range(len(input_ids)):
 
         token, _, _ = ExLlamaV2Sampler.sample(logits[i:i+1, :, :], settings[i], input_ids[i], r, tokenizer)
