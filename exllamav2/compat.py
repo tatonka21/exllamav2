@@ -1,5 +1,6 @@
 
 import torch
+import math
 
 # On some setups Torch will attempt to use GPU peer-to-peer copies even when they are not supported. This is either
 # a driver issue, a bug in Torch, or both. Either way, the result is that .to() will create an empty tensor on the
@@ -27,7 +28,7 @@ def test_gpu_peer_copy(device_a, device_b):
     a = torch.randn(5, device = dev_i) + 123.0
     b = a.to(dev_j)
     c = b.to(dev_i)
-    if torch.all(a == c):
+    if torch.all(math.isclose(a, c, rel_tol=1e-09, abs_tol=0.0)):
         tested_peer_copy[idx_a][idx_b] = 1
         return True
     else:

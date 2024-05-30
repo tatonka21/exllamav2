@@ -1,5 +1,7 @@
 
 import os, sys
+import math
+
 min_version = (3, 8)
 if sys.version_info < min_version:
     print("")
@@ -107,12 +109,12 @@ class ExLlamaV2DeviceTensors:
         head_dim = self.model.config.head_dim
         device = _torch_device(self.device_idx)
 
-        if alpha != 1.0: base *= alpha ** (self.model.config.head_dim / (self.model.config.head_dim - 2))
+        if not math.isclose(alpha, 1.0, rel_tol=1e-09, abs_tol=0.0): base *= alpha ** (self.model.config.head_dim / (self.model.config.head_dim - 2))
 
         inv_freq = 1.0 / (base ** (torch.arange(0, head_dim, 2, device = device).float() / head_dim))
         t = torch.arange(self.model.config.max_seq_len, device = device, dtype = torch.float32)
 
-        if scale != 1.0: t /= scale
+        if not math.isclose(scale, 1.0, rel_tol=1e-09, abs_tol=0.0): t /= scale
 
         freqs = torch.einsum("i,j->ij", t, inv_freq)
         emb = torch.cat((freqs, freqs), dim=-1)

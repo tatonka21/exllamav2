@@ -5,6 +5,7 @@ from safetensors.torch import load_file as safe_load_file
 from torch import load as load_file
 import torch
 from exllamav2.compat import safe_move_tensor
+import math
 
 class ExLlamaV2Lora:
     lora_config_path: str
@@ -120,7 +121,7 @@ class ExLlamaV2Lora:
 
                 # Pre-scale
 
-                if lora_half == "lora_B" and self.lora_scaling != 1.0: tensor.mul_(self.lora_scaling)
+                if lora_half == "lora_B" and not math.isclose(self.lora_scaling, 1.0, rel_tol=1e-09, abs_tol=0.0): tensor.mul_(self.lora_scaling)
 
                 # Check that dtype is compatible, or convert
 

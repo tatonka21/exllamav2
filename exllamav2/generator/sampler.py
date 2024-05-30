@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 from exllamav2 import ExLlamaV2Tokenizer
 from exllamav2.ext import exllamav2_ext as ext_c, none_tensor
+import math
 
 class ExLlamaV2Sampler:
 
@@ -141,9 +142,9 @@ class ExLlamaV2Sampler:
 
         # Repetition penalty
 
-        if settings.token_repetition_penalty != 1.0 or \
-            settings.token_frequency_penalty != 0.0 or \
-            settings.token_presence_penalty != 0.0:
+        if not math.isclose(settings.token_repetition_penalty, 1.0, rel_tol=1e-09, abs_tol=0.0) or \
+            not math.isclose(settings.token_frequency_penalty, 0.0, rel_tol=1e-09, abs_tol=0.0) or \
+            not math.isclose(settings.token_presence_penalty, 0.0, rel_tol=1e-09, abs_tol=0.0):
 
             ext_c.apply_rep_penalty(sequence_ids[:, :],
                                     settings.token_repetition_penalty,
