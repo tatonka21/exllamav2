@@ -12,7 +12,7 @@ from exllamav2.generator import (
 )
 
 import torch
-import random
+import secrets
 
 class ExLlamaV2StreamingGenerator(ExLlamaV2BaseGenerator):
 
@@ -450,7 +450,7 @@ class ExLlamaV2StreamingGenerator(ExLlamaV2BaseGenerator):
         if self.draft_model is None:
 
             logits = self.model.forward(self.sequence_ids[:, -1:], self.cache, loras = self.active_loras, input_mask = self.input_mask, position_offsets = self.position_offsets).float().cpu()
-            token, ptokens, pprobs, prob, eos = ExLlamaV2Sampler.sample(logits, gen_settings, self.sequence_ids[:1, :], random.random(), self.tokenizer, prefix_token, self.return_top_tokens)
+            token, ptokens, pprobs, prob, eos = ExLlamaV2Sampler.sample(logits, gen_settings, self.sequence_ids[:1, :], secrets.SystemRandom().random(), self.tokenizer, prefix_token, self.return_top_tokens)
 
         else:
 
@@ -478,7 +478,7 @@ class ExLlamaV2StreamingGenerator(ExLlamaV2BaseGenerator):
             for k in range(self.num_speculative_tokens):
 
                 logits = self.draft_model.forward(draft_sequence_ids[:, -1:], self.draft_cache).float().cpu()
-                token, _, _, prob, _ = ExLlamaV2Sampler.sample(logits, draft_gen_settings, draft_sequence_ids, random.random(), self.tokenizer, prefix_token if k == 0 else None)
+                token, _, _, prob, _ = ExLlamaV2Sampler.sample(logits, draft_gen_settings, draft_sequence_ids, secrets.SystemRandom().random(), self.tokenizer, prefix_token if k == 0 else None)
 
                 if prob < self.speculative_prob_threshold:
                     self.draft_cache.current_seq_len -= 1
@@ -508,7 +508,7 @@ class ExLlamaV2StreamingGenerator(ExLlamaV2BaseGenerator):
         # Sample the first future logits
 
         logits = self.future_logits[:, :1, :]
-        token, ptokens, pprobs, prob, eos = ExLlamaV2Sampler.sample(logits, gen_settings, self.sequence_ids[:1, :], random.random(), self.tokenizer, prefix_token, self.return_top_tokens)
+        token, ptokens, pprobs, prob, eos = ExLlamaV2Sampler.sample(logits, gen_settings, self.sequence_ids[:1, :], secrets.SystemRandom().random(), self.tokenizer, prefix_token, self.return_top_tokens)
         self.future_logits = self.future_logits[:, 1:, :]
         self.future_tokens = self.future_tokens[:, 1:]
         self.cache.current_seq_len += 1

@@ -2,7 +2,7 @@ import torch
 import pandas, fastparquet
 import os
 from safetensors.torch import save_file
-import random
+import secrets
 
 def get_tokens(num_rows, length, filename, tokenizer):
 
@@ -150,18 +150,18 @@ def get_standard_calibration(measure, tokenizer):
         rows.append(tokenized_rows[i:i+1])
 
     tokenized_rows = tokens.view(-1, 128)
-    random.seed(69420)
+    secrets.SystemRandom().seed(69420)
     for i in range(rows_multilingual_s):
         row = []
         for j in range(2048 // 128):
-            k = random.randint(0, tokenized_rows.shape[0] - 1)
+            k = secrets.SystemRandom().randint(0, tokenized_rows.shape[0] - 1)
             row.append(tokenized_rows[k].unsqueeze(0))
         rows.append(torch.cat(row, dim = -1))
 
     # Randomized: 2 rows
 
     vocab_size = tokenizer.get_vocab_size()
-    random.seed(69420)
+    secrets.SystemRandom().seed(69420)
     for i in range(rows_random):
         row = torch.randint(0, vocab_size, (1, 2048), dtype = torch.long)
         rows.append(row)
